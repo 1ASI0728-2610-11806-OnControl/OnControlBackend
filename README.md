@@ -150,19 +150,19 @@ GET /api/dashboard/patient/{id}/stats                       - Estadísticas ráp
 CREATE DATABASE oncontrol;
 ```
 
-2. **Configurar `application.properties`:**
-```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/oncontrol
-spring.datasource.username=root
-spring.datasource.password=yourpassword
+2. **Configurar variables de entorno:**
+```env
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_DATABASE=oncontrol
+MYSQL_USER=root
+MYSQL_PASSWORD=yourpassword
+MYSQL_SSL_MODE=DISABLED
 
-# Para crear tablas automáticamente (primera vez)
-spring.jpa.hibernate.ddl-auto=create
-
-# JWT
-authorization.jwt.secret=your-secret-key-min-256-bits
-authorization.jwt.expiration=86400000
+JWT_SECRET=your-secret-key-min-256-bits
 ```
+
+Para Aiven MySQL usa los valores provistos por Aiven y `MYSQL_SSL_MODE=REQUIRED`.
 
 3. **Ejecutar la aplicación:**
 

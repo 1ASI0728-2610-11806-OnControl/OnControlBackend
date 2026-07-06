@@ -73,16 +73,21 @@ public class DataSeeder implements CommandLineRunner {
             User organization = createOrganization();
             
             // 2. Crear Doctores
-            DoctorProfile doctor1 = createDoctor(organization, "Carlos", "García", "dr.garcia@hospital.com", "Oncología Médica", "MED-12345");
-            DoctorProfile doctor2 = createDoctor(organization, "María", "Rodríguez", "dr.rodriguez@hospital.com", "Oncología Quirúrgica", "MED-67890");
+            DoctorProfile doctor1 = createDoctor(organization, "Carlos", "García", "dr.garcia@hospital.com", "Oncología Médica", "MED-12345", "password123");
+            DoctorProfile doctor2 = createDoctor(organization, "María", "Rodríguez", "dr.rodriguez@hospital.com", "Oncología Quirúrgica", "MED-67890", "password123");
             
             // 3. Crear Pacientes para Doctor 1
-            PatientProfile patient1 = createPatient(doctor1, "Juan", "Pérez", "juan.perez@email.com", "O+", "Pulmón", "II");
-            PatientProfile patient2 = createPatient(doctor1, "Ana", "Martínez", "ana.martinez@email.com", "A+", "Mama", "I");
+            PatientProfile patient1 = createPatient(doctor1, "Juan", "Pérez", "juan.perez@email.com", "O+", "Pulmón", "II", "password123");
+            PatientProfile patient2 = createPatient(doctor1, "Ana", "Martínez", "ana.martinez@email.com", "A+", "Mama", "I", "password123");
             
             // 4. Crear Pacientes para Doctor 2
-            PatientProfile patient3 = createPatient(doctor2, "Pedro", "López", "pedro.lopez@email.com", "B+", "Colon", "III");
-            PatientProfile patient4 = createPatient(doctor2, "Laura", "Sánchez", "laura.sanchez@email.com", "AB+", "Próstata", "II");
+            PatientProfile patient3 = createPatient(doctor2, "Pedro", "López", "pedro.lopez@email.com", "B+", "Colon", "III", "password123");
+            PatientProfile patient4 = createPatient(doctor2, "Laura", "Sánchez", "laura.sanchez@email.com", "AB+", "Próstata", "II", "password123");
+
+            // Demo credentials for Grupo 2 academic redeploy.
+            User demoOrganization = createGroupDemoOrganization();
+            DoctorProfile demoDoctor = createDoctor(demoOrganization, "Doctor", "Grupo 2", "doctor.grupo2@oncontrol.com", "Oncologia Medica", "GRUPO2-MED-001", "OnControl2026!");
+            createPatient(demoDoctor, "Paciente", "Grupo 2", "paciente.grupo2@oncontrol.com", "O+", "Demo IoT", "I", "OnControl2026!");
             
             // 5. Crear Citas
             createAppointment(doctor1.getProfile(), patient1.getProfile(), LocalDateTime.now().plusDays(2), AppointmentType.PRIMERA_CONSULTA);
@@ -154,6 +159,9 @@ public class DataSeeder implements CommandLineRunner {
             log.info("   Patient 2: ana.martinez@email.com / password123");
             log.info("   Patient 3: pedro.lopez@email.com / password123");
             log.info("   Patient 4: laura.sanchez@email.com / password123");
+            log.info("   Demo Admin: admin.grupo2@oncontrol.com / OnControl2026!");
+            log.info("   Demo Doctor: doctor.grupo2@oncontrol.com / OnControl2026!");
+            log.info("   Demo Patient: paciente.grupo2@oncontrol.com / OnControl2026!");
             
         } catch (Exception e) {
             log.error("❌ Error in DataSeeder: {}", e.getMessage(), e);
@@ -185,14 +193,39 @@ public class DataSeeder implements CommandLineRunner {
         return organization;
     }
 
+    private User createGroupDemoOrganization() {
+        User organization = User.builder()
+                .email("admin.grupo2@oncontrol.com")
+                .password(passwordEncoder.encode("OnControl2026!"))
+                .organizationName("OnControl Grupo 2")
+                .country("Peru")
+                .city("Lima")
+                .phone("+51 999 000 002")
+                .address("Demo academica")
+                .website("https://oncontrol-grupo2.vercel.app")
+                .licenseNumber("GRUPO2-ORG-001")
+                .taxId("GRUPO2-DEMO")
+                .description("Organizacion demo para redeploy academico del Grupo 2")
+                .role(UserRole.ORGANIZATION)
+                .maxDoctors(10)
+                .maxPatients(100)
+                .isActive(true)
+                .isEmailVerified(true)
+                .build();
+
+        organization = userRepository.save(organization);
+        log.info("Created demo organization: {}", organization.getOrganizationName());
+        return organization;
+    }
+
     private DoctorProfile createDoctor(User organization, String firstName, String lastName, String email, 
-                                      String specialization, String licenseNumber) {
+                                      String specialization, String licenseNumber, String password) {
         // Crear Profile
         Profile profile = Profile.builder()
                 .user(organization)
                 .profileType(ProfileType.DOCTOR)
                 .email(email)
-                .password(passwordEncoder.encode("password123"))
+                .password(passwordEncoder.encode(password))
                 .firstName(firstName)
                 .lastName(lastName)
                 .phone("+52 55 " + (int)(Math.random() * 9000000 + 1000000))
@@ -225,13 +258,13 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private PatientProfile createPatient(DoctorProfile doctorProfile, String firstName, String lastName, 
-                                        String email, String bloodType, String cancerType, String cancerStage) {
+                                        String email, String bloodType, String cancerType, String cancerStage, String password) {
         // Crear Profile
         Profile profile = Profile.builder()
                 .user(doctorProfile.getOrganization())
                 .profileType(ProfileType.PATIENT)
                 .email(email)
-                .password(passwordEncoder.encode("password123"))
+                .password(passwordEncoder.encode(password))
                 .firstName(firstName)
                 .lastName(lastName)
                 .phone("+52 55 " + (int)(Math.random() * 9000000 + 1000000))
