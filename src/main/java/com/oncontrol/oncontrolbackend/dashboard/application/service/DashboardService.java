@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -66,6 +67,7 @@ public class DashboardService {
         int totalPatients = 0;
         int activePatients = 0;
         Map<Long, OrganizationDashboardResponse.DoctorStatistics> doctorStats = new HashMap<>();
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         
         for (DoctorProfileResponse doctor : doctors) {
             List<PatientProfileResponse> patients = profileService.getPatientsByDoctorId(doctor.getId());
@@ -76,11 +78,10 @@ public class DashboardService {
             activePatients += doctorActivePatients;
             
             // Get appointments for this doctor
-            List<Appointment> doctorAppointments = appointmentRepository.findByDoctorId(doctor.getId());
+            List<Appointment> doctorAppointments = appointmentRepository.findByDoctorId(doctor.getAccountProfileId());
             int totalAppts = doctorAppointments.size();
             int upcomingAppts = (int) doctorAppointments.stream()
-                    .filter(a -> a.getAppointmentDate().isAfter(LocalDateTime.now()))
-                    .filter(a -> a.getStatus() == AppointmentStatus.SCHEDULED || a.getStatus() == AppointmentStatus.CONFIRMED)
+                    .filter(a -> isUpcoming(a, now))
                     .count();
             
             doctorStats.put(doctor.getId(), OrganizationDashboardResponse.DoctorStatistics.builder()
@@ -138,14 +139,20 @@ public class DashboardService {
         int activePatients = (int) patients.stream().filter(PatientProfileResponse::getIsActive).count();
         
         // Get appointments
-        List<Appointment> allAppointments = filterByPatientId != null 
-                ? appointmentRepository.findByPatientId(filterByPatientId)
-                : appointmentRepository.findByDoctorId(doctorProfileId);
+        List<Appointment> allAppointments = appointmentRepository.findByDoctorId(doctor.getAccountProfileId());
+        if (filterByPatientId != null) {
+            Set<Long> patientAccountIds = patients.stream()
+                    .map(PatientProfileResponse::getAccountProfileId)
+                    .collect(Collectors.toSet());
+            allAppointments = allAppointments.stream()
+                    .filter(a -> patientAccountIds.contains(a.getPatient().getId()))
+                    .toList();
+        }
         
         int totalAppointments = allAppointments.size();
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         List<Appointment> upcoming = allAppointments.stream()
-                .filter(a -> a.getAppointmentDate().isAfter(LocalDateTime.now()))
-                .filter(a -> a.getStatus() == AppointmentStatus.SCHEDULED || a.getStatus() == AppointmentStatus.CONFIRMED)
+                .filter(a -> isUpcoming(a, now))
                 .sorted(Comparator.comparing(Appointment::getAppointmentDate))
                 .collect(Collectors.toList());
         
@@ -155,7 +162,7 @@ public class DashboardService {
         
         // Get symptoms
         List<Profile> patientProfiles = patients.stream()
-                .map(p -> profileRepository.findById(p.getId()).orElse(null))
+                .map(p -> profileRepository.findById(p.getAccountProfileId()).orElse(null))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
         
@@ -179,15 +186,17 @@ public class DashboardService {
                 .collect(Collectors.toList());
         
         // Build patient statistics
+        Map<Long, List<Appointment>> appointmentsByPatient = allAppointments.stream()
+                .collect(Collectors.groupingBy(a -> a.getPatient().getId()));
         Map<Long, DoctorDashboardResponse.PatientStatistics> patientStats = new HashMap<>();
         for (PatientProfileResponse patient : patients) {
-            List<Appointment> patientAppts = appointmentRepository.findByPatientId(patient.getId());
+            List<Appointment> patientAppts = appointmentsByPatient.getOrDefault(patient.getAccountProfileId(), List.of());
             List<Appointment> patientUpcoming = patientAppts.stream()
-                    .filter(a -> a.getAppointmentDate().isAfter(LocalDateTime.now()))
+                    .filter(a -> isUpcoming(a, now))
                     .sorted(Comparator.comparing(Appointment::getAppointmentDate))
                     .collect(Collectors.toList());
             
-            Profile patientProfile = profileRepository.findById(patient.getId()).orElse(null);
+            Profile patientProfile = profileRepository.findById(patient.getAccountProfileId()).orElse(null);
             int symptomsLastMonth = 0;
             int criticalSymptomsCount = 0;
             
@@ -257,14 +266,14 @@ public class DashboardService {
         PatientProfileResponse patient = profileService.getPatientProfileById(patientProfileId);
         DoctorProfileResponse doctor = profileService.getDoctorProfileById(patient.getDoctorProfileId());
         
-        Profile patientProfile = profileRepository.findById(patientProfileId)
+        Profile patientProfile = profileRepository.findById(patient.getAccountProfileId())
                 .orElseThrow(() -> new RuntimeException("Patient profile not found"));
         
         // Get appointments
-        List<Appointment> allAppointments = appointmentRepository.findByPatientId(patientProfileId);
+        List<Appointment> allAppointments = appointmentRepository.findByPatientId(patient.getAccountProfileId());
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         List<Appointment> upcoming = allAppointments.stream()
-                .filter(a -> a.getAppointmentDate().isAfter(LocalDateTime.now()))
-                .filter(a -> a.getStatus() == AppointmentStatus.SCHEDULED || a.getStatus() == AppointmentStatus.CONFIRMED)
+                .filter(a -> isUpcoming(a, now))
                 .sorted(Comparator.comparing(Appointment::getAppointmentDate))
                 .collect(Collectors.toList());
         
@@ -337,7 +346,13 @@ public class DashboardService {
                 .build();
     }
 
-    // Helper method
+    private boolean isUpcoming(Appointment appointment, LocalDateTime now) {
+        return appointment.getAppointmentDate().isAfter(now)
+                && (appointment.getStatus() == AppointmentStatus.SCHEDULED
+                    || appointment.getStatus() == AppointmentStatus.CONFIRMED
+                    || appointment.getStatus() == AppointmentStatus.RESCHEDULED);
+    }
+
     private AppointmentResponse mapToAppointmentResponse(Appointment appointment) {
         Profile doctor = appointment.getDoctor();
         Profile patient = appointment.getPatient();

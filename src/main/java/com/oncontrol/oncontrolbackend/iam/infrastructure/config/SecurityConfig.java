@@ -55,7 +55,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/patients/**").authenticated()
                         .requestMatchers("/api/doctors/**").authenticated()
                         .requestMatchers("/api/organizations/**").authenticated()
-                        .requestMatchers("/api/dashboard/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

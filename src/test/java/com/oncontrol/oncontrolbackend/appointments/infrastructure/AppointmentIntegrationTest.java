@@ -25,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -71,6 +72,8 @@ class AppointmentIntegrationTest {
 
     private Profile doctorProfile;
     private Profile patientProfile;
+    private DoctorProfile doctorRecord;
+    private PatientProfile patientRecord;
 
     @BeforeEach
     void setUp() {
@@ -116,7 +119,7 @@ class AppointmentIntegrationTest {
                 .rating(4.5)
                 .totalReviews(50)
                 .build();
-        doctorProfileRepository.save(doctorSpecificProfile);
+        doctorRecord = doctorProfileRepository.save(doctorSpecificProfile);
 
         // Crear perfil de paciente
         patientProfile = Profile.builder()
@@ -144,7 +147,7 @@ class AppointmentIntegrationTest {
                 .insuranceProvider("Seguro Test")
                 .insuranceNumber("INS-12345")
                 .build();
-        patientProfileRepository.save(patientSpecificProfile);
+        patientRecord = patientProfileRepository.save(patientSpecificProfile);
     }
 
     @Test
@@ -175,6 +178,49 @@ class AppointmentIntegrationTest {
                 .andExpect(jsonPath("$.appointment.status").value("SCHEDULED"))
                 .andExpect(jsonPath("$.appointment.location").value("Consultorio 101"))
                 .andExpect(jsonPath("$.appointment.durationMinutes").value(30));
+    }
+
+    @Test
+    void dashboardCountsMatchAppointmentLifecycleForParticipants() throws Exception {
+        var original = LocalDateTime.now(ZoneOffset.UTC).plusDays(3).withNano(0);
+        var newDate = original.plusDays(1);
+        Long id = createTestAppointment(original, AppointmentType.PRIMERA_CONSULTA);
+
+        expectDashboardCounts(doctorDashboard(), 1, 1);
+        expectDashboardCounts(patientDashboard(), 1, 1);
+        mockMvc.perform(get("/api/dashboard/doctor/{id}", doctorRecord.getId()).with(user(patientProfile)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(patch("/api/appointments/{id}/schedule", id).with(user(patientProfile))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("appointmentDate", newDate.toInstant(ZoneOffset.UTC)))))
+                .andExpect(status().isOk());
+        expectDashboardCounts(doctorDashboard(), 1, 1)
+                .andExpect(jsonPath("$.upcomingAppointmentsList[0].id").value(id.intValue()))
+                .andExpect(jsonPath("$.upcomingAppointmentsList[0].appointmentDate").value(newDate.toString()));
+        expectDashboardCounts(patientDashboard(), 1, 1);
+
+        mockMvc.perform(patch("/api/appointments/{id}/status", id).with(user(patientProfile))
+                        .param("status", "CANCELLED"))
+                .andExpect(status().isOk());
+        expectDashboardCounts(doctorDashboard(), 1, 0)
+                .andExpect(jsonPath("$.upcomingAppointmentsList", hasSize(0)))
+                .andExpect(jsonPath("$.patientStatistics." + patientRecord.getId() + ".upcomingAppointments").value(0));
+        expectDashboardCounts(patientDashboard(), 1, 0);
+    }
+
+    private ResultActions doctorDashboard() throws Exception {
+        return mockMvc.perform(get("/api/dashboard/doctor/{id}", doctorRecord.getId()).with(user(doctorProfile)));
+    }
+
+    private ResultActions patientDashboard() throws Exception {
+        return mockMvc.perform(get("/api/dashboard/patient/{id}", patientRecord.getId()).with(user(patientProfile)));
+    }
+
+    private ResultActions expectDashboardCounts(ResultActions result, int total, int upcoming) throws Exception {
+        return result.andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalAppointments").value(total))
+                .andExpect(jsonPath("$.upcomingAppointments").value(upcoming));
     }
 
     @Test
