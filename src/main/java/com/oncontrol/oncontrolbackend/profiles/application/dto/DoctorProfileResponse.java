@@ -15,6 +15,7 @@ import java.time.LocalDate;
 public class DoctorProfileResponse {
     
     private Long id;
+    private Long accountProfileId;
     private String profileId;
     
     // Profile common fields

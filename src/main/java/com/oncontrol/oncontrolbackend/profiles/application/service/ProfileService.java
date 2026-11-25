@@ -227,6 +227,7 @@ public class ProfileService {
         
         return DoctorProfileResponse.builder()
                 .id(doctorProfile.getId())
+                .accountProfileId(profile.getId())
                 .profileId(profile.getProfileId())
                 .email(profile.getEmail())
                 .firstName(profile.getFirstName())
@@ -257,6 +258,7 @@ public class ProfileService {
         
         return PatientProfileResponse.builder()
                 .id(patientProfile.getId())
+                .accountProfileId(profile.getId())
                 .profileId(profile.getProfileId())
                 .email(profile.getEmail())
                 .firstName(profile.getFirstName())
@@ -266,6 +268,7 @@ public class ProfileService {
                 .city(profile.getCity())
                 .address(profile.getAddress())
                 .doctorProfileId(doctorProfile.getId())
+                .doctorAccountProfileId(doctorProfileInfo.getId())
                 .doctorName(doctorProfileInfo.getFullName())
                 .bloodType(patientProfile.getBloodType())
                 .allergies(patientProfile.getAllergies())

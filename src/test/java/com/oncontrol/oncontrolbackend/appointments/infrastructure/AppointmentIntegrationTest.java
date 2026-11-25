@@ -29,6 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -40,7 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Test de integración para el módulo de Appointments
  * Prueba el flujo completo desde el controlador hasta la base de datos
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.payments.demo.enabled=true")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
@@ -173,6 +175,99 @@ class AppointmentIntegrationTest {
                 .andExpect(jsonPath("$.appointment.status").value("SCHEDULED"))
                 .andExpect(jsonPath("$.appointment.location").value("Consultorio 101"))
                 .andExpect(jsonPath("$.appointment.durationMinutes").value(30));
+    }
+
+    @Test
+    void appointmentNoticesStayWithRecipientAndDoNotRepeat() throws Exception {
+        var date = LocalDateTime.now(ZoneOffset.UTC).plusDays(4).withNano(0);
+        Long appointmentId = createTestAppointment(date, AppointmentType.PRIMERA_CONSULTA);
+
+        String inbox = mockMvc.perform(get("/api/notifications/me").with(user(patientProfile)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unreadCount").value(1))
+                .andExpect(jsonPath("$.items[0].type").value("SCHEDULED"))
+                .andExpect(jsonPath("$.items[0].appointmentId").value(appointmentId.intValue()))
+                .andReturn().getResponse().getContentAsString();
+        long notificationId = objectMapper.readTree(inbox).at("/items/0/id").asLong();
+        mockMvc.perform(get("/api/notifications/me").with(user(doctorProfile)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", hasSize(0)));
+        mockMvc.perform(put("/api/notifications/me/{id}/read", notificationId).with(user(patientProfile)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.readAt").isString());
+        mockMvc.perform(get("/api/notifications/me").with(user(patientProfile)))
+                .andExpect(jsonPath("$.unreadCount").value(0))
+                .andExpect(jsonPath("$.items", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].readAt").isString());
+
+        for (int retry = 0; retry < 2; retry++) {
+            mockMvc.perform(patch("/api/appointments/{id}/status", appointmentId).with(user(patientProfile))
+                            .param("status", "CANCELLED"))
+                    .andExpect(status().isOk());
+        }
+        mockMvc.perform(get("/api/notifications/me").with(user(doctorProfile)))
+                .andExpect(jsonPath("$.unreadCount").value(1))
+                .andExpect(jsonPath("$.items", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].type").value("CANCELLED"));
+    }
+
+    @Test
+    void rescheduleRejectsOverlapAndNotifiesDoctorOnceWhenDateChanges() throws Exception {
+        var original = LocalDateTime.now(ZoneOffset.UTC).plusDays(3).withNano(0);
+        var occupied = original.plusDays(1);
+        var target = original.plusDays(2);
+        Long id = createTestAppointment(original, AppointmentType.PRIMERA_CONSULTA);
+        createTestAppointment(occupied, AppointmentType.CONSULTA_SEGUIMIENTO);
+
+        mockMvc.perform(patch("/api/appointments/{id}/schedule", id).with(user(patientProfile))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("appointmentDate", occupied.plusMinutes(15).toInstant(ZoneOffset.UTC)))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.alternatives", hasSize(3)));
+        mockMvc.perform(get("/api/appointments/{id}", id).with(user(patientProfile)))
+                .andExpect(jsonPath("$.appointmentDate").value(original.toString()));
+        mockMvc.perform(get("/api/notifications/me").with(user(doctorProfile)))
+                .andExpect(jsonPath("$.unreadCount").value(0));
+
+        for (int retry = 0; retry < 2; retry++) {
+            mockMvc.perform(patch("/api/appointments/{id}/schedule", id).with(user(patientProfile))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("appointmentDate", target.toInstant(ZoneOffset.UTC)))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.appointment.appointmentDate").value(target.toString()));
+        }
+        mockMvc.perform(get("/api/appointments/doctor/{id}", doctorProfile.getId()).with(user(doctorProfile)))
+                .andExpect(jsonPath("$.appointments[*].appointmentDate", hasItem(target.toString())));
+        mockMvc.perform(get("/api/notifications/me").with(user(doctorProfile)))
+                .andExpect(jsonPath("$.items", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].type").value("RESCHEDULED"))
+                .andExpect(jsonPath("$.items[0].appointmentDate").value(target.toInstant(ZoneOffset.UTC).toString()));
+    }
+
+    @Test
+    void demoPaymentStoresOnlyAcceptedScenariosAndCanRemoveThem() throws Exception {
+        for (String invalid : new String[]{"DECLINED", "EXPIRED"}) {
+            mockMvc.perform(post("/api/payment-methods/demo").with(user(patientProfile))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("scenario", invalid))))
+                    .andExpect(status().isUnprocessableEntity());
+        }
+        mockMvc.perform(get("/api/payment-methods/demo").with(user(patientProfile)))
+                .andExpect(jsonPath("$", hasSize(0)));
+
+        String result = mockMvc.perform(post("/api/payment-methods/demo").with(user(patientProfile))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("scenario", "VALID_VISA"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.lastFour").value("4242"))
+                .andReturn().getResponse().getContentAsString();
+        long methodId = objectMapper.readTree(result).get("id").asLong();
+        mockMvc.perform(get("/api/payment-methods/demo").with(user(patientProfile)))
+                .andExpect(jsonPath("$[0].brand").value("Visa"));
+        mockMvc.perform(delete("/api/payment-methods/demo/{id}", methodId).with(user(patientProfile)))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/payment-methods/demo").with(user(patientProfile)))
+                .andExpect(jsonPath("$", hasSize(0)));
     }
 
     @Test
