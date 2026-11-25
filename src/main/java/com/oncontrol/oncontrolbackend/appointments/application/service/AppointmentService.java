@@ -190,9 +190,10 @@ public class AppointmentService {
                     .toList();
             throw new ScheduleConflict(alternatives);
         }
+        LocalDateTime previousDate = appointment.getAppointmentDate();
         appointment.setAppointmentDate(newDate);
         appointment.setReminderSent(false);
-        notifications.record(doctorId, appointment, AppointmentNotification.Type.RESCHEDULED);
+        notifications.recordReschedule(doctorId, appointment, previousDate);
         return mapToAppointmentResponse(appointment);
     }
 

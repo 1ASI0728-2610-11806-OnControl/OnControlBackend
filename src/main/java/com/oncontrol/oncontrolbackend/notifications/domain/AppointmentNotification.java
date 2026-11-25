@@ -35,17 +35,22 @@ public class AppointmentNotification {
     @Column(nullable = false)
     private LocalDateTime appointmentDate;
 
+    @Column
+    private LocalDateTime previousAppointmentDate;
+
     @Column(nullable = false)
     private Instant createdAt;
 
     @Column(name = "read_at")
     private Instant readAt;
 
-    public AppointmentNotification(Long recipientId, Long appointmentId, Type type, LocalDateTime appointmentDate) {
+    public AppointmentNotification(Long recipientId, Long appointmentId, Type type,
+                                   LocalDateTime appointmentDate, LocalDateTime previousAppointmentDate) {
         this.recipientId = recipientId;
         this.appointmentId = appointmentId;
         this.type = type;
         this.appointmentDate = appointmentDate;
+        this.previousAppointmentDate = previousAppointmentDate;
         this.createdAt = Instant.now();
     }
 }

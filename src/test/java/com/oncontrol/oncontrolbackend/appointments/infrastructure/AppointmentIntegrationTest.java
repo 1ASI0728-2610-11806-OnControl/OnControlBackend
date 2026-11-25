@@ -287,7 +287,20 @@ class AppointmentIntegrationTest {
         mockMvc.perform(get("/api/notifications/me").with(user(doctorProfile)))
                 .andExpect(jsonPath("$.items", hasSize(1)))
                 .andExpect(jsonPath("$.items[0].type").value("RESCHEDULED"))
+                .andExpect(jsonPath("$.items[0].previousAppointmentDate").value(original.toInstant(ZoneOffset.UTC).toString()))
                 .andExpect(jsonPath("$.items[0].appointmentDate").value(target.toInstant(ZoneOffset.UTC).toString()));
+
+        var finalDate = target.plusDays(1);
+        mockMvc.perform(patch("/api/appointments/{id}/schedule", id).with(user(patientProfile))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("appointmentDate", finalDate.toInstant(ZoneOffset.UTC)))))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/notifications/me").with(user(doctorProfile)))
+                .andExpect(jsonPath("$.items", hasSize(2)))
+                .andExpect(jsonPath("$.items[0].previousAppointmentDate").value(target.toInstant(ZoneOffset.UTC).toString()))
+                .andExpect(jsonPath("$.items[0].appointmentDate").value(finalDate.toInstant(ZoneOffset.UTC).toString()))
+                .andExpect(jsonPath("$.items[1].previousAppointmentDate").value(original.toInstant(ZoneOffset.UTC).toString()))
+                .andExpect(jsonPath("$.items[1].appointmentDate").value(target.toInstant(ZoneOffset.UTC).toString()));
     }
 
     @Test

@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
@@ -23,7 +24,17 @@ public class AppointmentNotificationService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void record(Long recipientId, Appointment appointment, AppointmentNotification.Type type) {
-        repository.save(new AppointmentNotification(recipientId, appointment.getId(), type, appointment.getAppointmentDate()));
+        record(recipientId, appointment, type, null);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordReschedule(Long recipientId, Appointment appointment, LocalDateTime previousDate) {
+        record(recipientId, appointment, AppointmentNotification.Type.RESCHEDULED, previousDate);
+    }
+
+    private void record(Long recipientId, Appointment appointment, AppointmentNotification.Type type, LocalDateTime previousDate) {
+        repository.save(new AppointmentNotification(recipientId, appointment.getId(), type,
+                appointment.getAppointmentDate(), previousDate));
     }
 
     @Transactional(readOnly = true)
@@ -47,10 +58,13 @@ public class AppointmentNotificationService {
 
     public record Inbox(List<NotificationView> items, long unreadCount, Long nextBeforeId) {}
     public record NotificationView(Long id, Long appointmentId, AppointmentNotification.Type type,
-                                   Instant appointmentDate, Instant createdAt, Instant readAt) {
+                                   Instant appointmentDate, Instant previousAppointmentDate, Instant createdAt, Instant readAt) {
         static NotificationView from(AppointmentNotification value) {
+            var previousDate = value.getPreviousAppointmentDate();
             return new NotificationView(value.getId(), value.getAppointmentId(), value.getType(),
-                    value.getAppointmentDate().toInstant(ZoneOffset.UTC), value.getCreatedAt(), value.getReadAt());
+                    value.getAppointmentDate().toInstant(ZoneOffset.UTC),
+                    previousDate == null ? null : previousDate.toInstant(ZoneOffset.UTC),
+                    value.getCreatedAt(), value.getReadAt());
         }
     }
 }
