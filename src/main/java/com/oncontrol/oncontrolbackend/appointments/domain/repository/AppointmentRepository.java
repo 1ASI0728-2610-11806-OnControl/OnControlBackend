@@ -4,16 +4,33 @@ import com.oncontrol.oncontrolbackend.appointments.domain.model.Appointment;
 import com.oncontrol.oncontrolbackend.appointments.domain.model.AppointmentStatus;
 import com.oncontrol.oncontrolbackend.appointments.domain.model.AppointmentType;
 import com.oncontrol.oncontrolbackend.profiles.domain.model.Profile;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 @Repository
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from Appointment a where a.id = :id")
+    Optional<Appointment> findByIdForUpdate(Long id);
+
+    @Query("""
+            select count(a) > 0 from Appointment a
+            where (a.doctor.id = :doctorId or a.patient.id = :patientId) and a.id <> :excludedId
+              and a.status in :activeStatuses and a.appointmentDate < :endTime
+              and timestampadd(minute, a.durationMinutes, a.appointmentDate) > :startTime
+            """)
+    boolean hasOverlap(Long doctorId, Long patientId, Long excludedId,
+                       Set<AppointmentStatus> activeStatuses, LocalDateTime startTime, LocalDateTime endTime);
     
     List<Appointment> findByDoctorId(Long doctorId);
     

@@ -6,6 +6,8 @@ import com.oncontrol.oncontrolbackend.appointments.domain.model.Appointment;
 import com.oncontrol.oncontrolbackend.appointments.domain.model.AppointmentStatus;
 import com.oncontrol.oncontrolbackend.appointments.domain.model.AppointmentType;
 import com.oncontrol.oncontrolbackend.appointments.domain.repository.AppointmentRepository;
+import com.oncontrol.oncontrolbackend.notifications.application.AppointmentNotificationService;
+import com.oncontrol.oncontrolbackend.profiles.domain.repository.PatientProfileRepository;
 import com.oncontrol.oncontrolbackend.profiles.domain.model.Profile;
 import com.oncontrol.oncontrolbackend.profiles.domain.model.ProfileType;
 import com.oncontrol.oncontrolbackend.profiles.domain.repository.ProfileRepository;
@@ -35,6 +37,12 @@ class AppointmentServiceTest {
 
     @Mock
     private ProfileRepository profileRepository;
+
+    @Mock
+    private PatientProfileRepository patientProfileRepository;
+
+    @Mock
+    private AppointmentNotificationService notifications;
 
     @InjectMocks
     private AppointmentService appointmentService;
@@ -85,11 +93,12 @@ class AppointmentServiceTest {
                 .notes("Regular checkup")
                 .build();
 
-        when(profileRepository.findById(1L)).thenReturn(Optional.of(doctorProfile));
+        when(profileRepository.findByIdForScheduling(1L)).thenReturn(Optional.of(doctorProfile));
         when(profileRepository.findById(2L)).thenReturn(Optional.of(patientProfile));
+        when(patientProfileRepository.existsByProfile_IdAndDoctorProfile_Profile_Id(2L, 1L)).thenReturn(true);
         when(appointmentRepository.save(any(Appointment.class))).thenReturn(appointment);
 
-        AppointmentResponse response = appointmentService.createAppointment(1L, 2L, request);
+        AppointmentResponse response = appointmentService.createAppointment(doctorProfile, 1L, 2L, request);
 
         assertNotNull(response);
         assertEquals(1L, response.getId());
@@ -106,10 +115,10 @@ class AppointmentServiceTest {
                 .type(AppointmentType.CONSULTA_GENERAL)
                 .build();
 
-        when(profileRepository.findById(1L)).thenReturn(Optional.empty());
+        when(profileRepository.findByIdForScheduling(1L)).thenReturn(Optional.empty());
 
         assertThrows(RuntimeException.class, () ->
-                appointmentService.createAppointment(1L, 2L, request)
+                appointmentService.createAppointment(doctorProfile, 1L, 2L, request)
         );
         verify(appointmentRepository, never()).save(any(Appointment.class));
     }
@@ -129,10 +138,11 @@ class AppointmentServiceTest {
 
     @Test
     void testUpdateAppointmentStatus_ToCancelled() {
-        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(appointment));
+        when(appointmentRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(appointment));
         when(appointmentRepository.save(any(Appointment.class))).thenReturn(appointment);
 
         AppointmentResponse response = appointmentService.updateAppointmentStatus(
+                patientProfile,
                 1L,
                 AppointmentStatus.CANCELLED,
                 "Patient requested cancellation"
@@ -151,7 +161,7 @@ class AppointmentServiceTest {
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(appointment));
         when(appointmentRepository.save(any(Appointment.class))).thenReturn(appointment);
 
-        AppointmentResponse response = appointmentService.addFollowUpNotes(1L, followUpNotes);
+        AppointmentResponse response = appointmentService.addFollowUpNotes(doctorProfile, 1L, followUpNotes);
 
         assertNotNull(response);
         assertEquals(followUpNotes, appointment.getFollowUpNotes());

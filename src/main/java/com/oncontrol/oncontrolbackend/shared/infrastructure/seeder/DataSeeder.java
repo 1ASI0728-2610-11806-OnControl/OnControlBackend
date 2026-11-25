@@ -27,6 +27,7 @@ import com.oncontrol.oncontrolbackend.medicalrecords.domain.repository.AllergyRe
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -37,10 +38,9 @@ import java.time.LocalTime;
 
 /**
  * DataSeeder - Crea datos iniciales para desarrollo y testing
- * 
- * Para DESACTIVAR el seeder, comenta la anotación @Component
  */
-@Component  // ✅ ACTIVADO - Cargar datos de prueba
+@Component
+@ConditionalOnProperty(name = "app.data.seeding.enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class DataSeeder implements CommandLineRunner {

@@ -55,7 +55,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/patients/**").authenticated()
                         .requestMatchers("/api/doctors/**").authenticated()
                         .requestMatchers("/api/organizations/**").authenticated()
-                        .requestMatchers("/api/dashboard/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -84,7 +83,7 @@ public class SecurityConfig {
                         .filter(origin -> !origin.isEmpty())
                         .toList()
         );
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
         

@@ -13,6 +13,10 @@ import java.util.Optional;
 public interface PatientProfileRepository extends JpaRepository<PatientProfile, Long> {
     
     Optional<PatientProfile> findByProfileId(Long profileId);
+
+    boolean existsByIdAndProfile_Id(Long id, Long profileId);
+
+    boolean existsByProfile_IdAndDoctorProfile_Profile_Id(Long patientId, Long doctorId);
     
     @Query("SELECT pp FROM PatientProfile pp WHERE pp.profile.firstName LIKE %:name% OR pp.profile.lastName LIKE %:name%")
     List<PatientProfile> findByNameContaining(@Param("name") String name);

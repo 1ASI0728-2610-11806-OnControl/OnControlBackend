@@ -13,6 +13,8 @@ import java.util.Optional;
 public interface DoctorProfileRepository extends JpaRepository<DoctorProfile, Long> {
     
     Optional<DoctorProfile> findByProfileId(Long profileId);
+
+    boolean existsByIdAndProfile_Id(Long id, Long profileId);
     
     Optional<DoctorProfile> findByLicenseNumber(String licenseNumber);
     
